@@ -7621,6 +7621,9 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
     children?: string[];
     title?: string;
     index?: string;
+    textAlign?: "left" | "center" | "right";
+    textHorizontalAlign?: "left" | "center" | "right";
+    textVerticalAlign?: "top" | "center" | "bottom";
   };
 
   type AddSurfaceElementInput = SurfaceElementFields & {
@@ -7736,9 +7739,9 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
       fontSize: input.fontSize ?? 20,
       fontStyle: "normal",
       fontWeight: input.fontWeight ?? "600",
-      textAlign: "center",
-      textHorizontalAlign: "center",
-      textVerticalAlign: "center",
+      textAlign: input.textAlign ?? "center",
+      textHorizontalAlign: input.textHorizontalAlign ?? "center",
+      textVerticalAlign: input.textVerticalAlign ?? "center",
       textResizing: 1,
       maxWidth: false,
       padding: [10, 20],
@@ -7898,7 +7901,7 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
       fontSize: input.fontSize ?? 16,
       fontStyle: "normal",
       fontWeight: input.fontWeight ?? "400",
-      textAlign: "center",
+      textAlign: input.textAlign ?? "center",
       hasMaxWidth: false,
     };
   }
@@ -8122,6 +8125,9 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
     mode:               ["connector"],
     frontEndpointStyle: ["connector"],
     rearEndpointStyle:  ["connector"],
+    textAlign:              ["shape", "text"],
+    textHorizontalAlign:    ["shape"],
+    textVerticalAlign:      ["shape"],
   };
 
   const updateSurfaceElementHandler = async (params: UpdateSurfaceElementInput) => {
@@ -8871,6 +8877,18 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
       .string()
       .optional()
       .describe("Font weight (shape default 600, text default 400). Shape/text."),
+    textAlign: z
+      .enum(["left", "center", "right"])
+      .optional()
+      .describe("Text alignment (default center). Shape/text only."),
+    textHorizontalAlign: z
+      .enum(["left", "center", "right"])
+      .optional()
+      .describe("Horizontal position of text label inside a shape (default center). Shape only."),
+    textVerticalAlign: z
+      .enum(["top", "center", "bottom"])
+      .optional()
+      .describe("Vertical position of text label inside a shape (default center). Shape only."),
     sourceId: z.string().optional().describe("Connector source element id. Connector only."),
     targetId: z.string().optional().describe("Connector target element id. Connector only."),
     sourcePosition: z
