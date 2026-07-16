@@ -889,6 +889,35 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
     return null;
   }
 
+  /** Find the affine:note that is a DIRECT child of affine:page — the canonical Page-note.
+   *  Y.Map iteration order is undefined, so findBlockIdByFlavour() returns an arbitrary note
+   *  when the doc has multiple (Page-note + daily/frame notes). This walks the page's
+   *  sys:children array instead, which reflects the real document hierarchy. */
+  function findPageNoteId(blocks: Y.Map<any>): string | null {
+    for (const [, value] of blocks) {
+      const block = value as Y.Map<any>;
+      if (!(block instanceof Y.Map)) continue;
+      if (block.get("sys:flavour") !== "affine:page") continue;
+      const children = childIdsFrom(block.get("sys:children") as Y.Array<string>);
+      for (const childId of children) {
+        const child = blocks.get(childId);
+        if (child instanceof Y.Map && child.get("sys:flavour") === "affine:note") {
+          return childId;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Count all affine:note blocks in the doc (for multi-note warnings). */
+  function countNoteBlocks(blocks: Y.Map<any>): number {
+    let count = 0;
+    for (const [, value] of blocks) {
+      if (value instanceof Y.Map && value.get("sys:flavour") === "affine:note") count++;
+    }
+    return count;
+  }
+
   function pruneFromFrameChildElementIds(blocks: Y.Map<any>, deletedIds: string[]): void {
     if (deletedIds.length === 0) return;
     const idSet = new Set(deletedIds);
@@ -904,7 +933,10 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
   }
 
   function ensureNoteBlock(blocks: Y.Map<any>): string {
-    const existingNoteId = findBlockIdByFlavour(blocks, "affine:note");
+    // Prefer the note that is a direct child of affine:page (the canonical Page-note).
+    // Falling back to findBlockIdByFlavour iterates Y.Map in undefined order and can
+    // return a daily/frame note instead of the root note when the doc has several.
+    const existingNoteId = findPageNoteId(blocks) ?? findBlockIdByFlavour(blocks, "affine:note");
     if (existingNoteId) {
       return existingNoteId;
     }
@@ -3157,6 +3189,7 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
     appendedCount: number;
     skippedCount: number;
     blockIds: string[];
+    noteCount?: number;
   }> {
     const strict = parsed.strict !== false;
     const replaceExisting = parsed.replaceExisting === true;
@@ -3245,6 +3278,7 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
         appendedCount: blockIds.length,
         skippedCount,
         blockIds,
+        noteCount: replaceExisting ? countNoteBlocks(blocks) : undefined,
       };
     } finally {
       socket.disconnect();
@@ -5823,10 +5857,16 @@ export function registerDocTools(server: McpServer, gql: GraphQLClient, defaults
       replaceExisting: true,
     });
 
-    const applyWarnings =
-      applied.skippedCount > 0
-        ? [`${applied.skippedCount} markdown block(s) could not be applied to AFFiNE and were skipped.`]
-        : [];
+    const applyWarnings: string[] = [];
+    if (applied.skippedCount > 0) {
+      applyWarnings.push(`${applied.skippedCount} markdown block(s) could not be applied to AFFiNE and were skipped.`);
+    }
+    if (applied.noteCount !== undefined && applied.noteCount > 1) {
+      applyWarnings.push(
+        `Document has ${applied.noteCount} affine:note blocks. Replaced the Page-note (direct child of affine:page). ` +
+        `Other notes (daily/frame notes) were NOT touched. If the wrong note was modified, use append_block with an explicit parentId instead.`
+      );
+    }
 
     return receipt("doc.replace_with_markdown", {
       workspaceId,
